@@ -8,7 +8,7 @@ import {
     mockFields 
 } from './bitrixService';
 import { importExcelToBitrix } from './importExcelToBitrix';
-import './styles.css';
+
 import Swal from 'sweetalert2';
 
 const SmartProcessUpdater = () => {
