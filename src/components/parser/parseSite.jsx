@@ -42,13 +42,14 @@ import {
 } from "../../services/ExcelLoading";
 
 const ParseSite = () => {
+
+
     const [inn, setInn] = useState("");
     const [isParsing, setIsParsing] = useState(false);
     const [progress, setProgress] = useState(0);
-    const [parsedData, setParsedData] = useState([]); // Инициализируем как пустой массив, а не null
+    const [parsedData, setParsedData] = useState([]);
     const [logs, setLogs] = useState([]);
 
-    // Функция для определения цвета логов
     const getLogColor = useCallback((type) => {
         switch (type) {
             case "success": return "#10b981";
@@ -76,14 +77,13 @@ const ParseSite = () => {
 
         setIsParsing(true);
         setProgress(0);
-        setParsedData([]); // Сбрасываем на пустой массив
+        setParsedData([]);
         setLogs([]);
 
         addLog("Начинаем парсинг...", "info");
         addLog(`Введенные ИНН: ${inn}`, "info");
 
         try {
-            // Парсим список ИНН
             const innArray = ParserService.parseINNList(inn);
 
             if (!innArray || innArray.length === 0) {
@@ -94,21 +94,19 @@ const ParseSite = () => {
 
             addLog(`Найдено ${innArray.length} валидных ИНН`, "info");
 
-            // Запускаем парсинг с обработкой прогресса
+
             const results = await ParserService.startParsingProcess(innArray, (progressData) => {
-                // Обновляем прогресс
+
                 if (progressData.step === 'Общий прогресс') {
                     setProgress(progressData.percent);
                 }
 
-                // Добавляем лог
                 const logMessage = progressData.message ||
                     `${progressData.inn ? `ИНН ${progressData.inn}: ` : ''}${progressData.step} - ${progressData.status}`;
 
                 addLog(logMessage, progressData.status === 'error' ? 'error' : 'info');
             });
 
-            // Сохраняем результаты (гарантируем, что это массив)
             const safeResults = Array.isArray(results) ? results : [];
             setParsedData(safeResults);
 
@@ -142,7 +140,6 @@ const ParseSite = () => {
         }
     };
 
-    // Хелпер для безопасного доступа к данным
     const getSafeData = () => {
         return Array.isArray(parsedData) ? parsedData : [];
     };
@@ -165,13 +162,13 @@ const ParseSite = () => {
 
             if (innValues.length > 0) {
                 setInn(innValues.join('\n'));
-                // Показываем уведомление (если у вас есть система уведомлений)
+
                 alert(`Загружено ${innValues.length} уникальных ИНН из файла "${file.name}"`);
             } else {
                 alert('ИНН не найдены в файле. Убедитесь, что файл содержит столбец с ИНН.');
             }
 
-            // Очищаем input
+
             event.target.value = '';
         } catch (error) {
             console.error('Ошибка при обработке файла:', error);
@@ -221,18 +218,17 @@ const ParseSite = () => {
             </Paper>
 
             {/* Основной контент */}
-            <Grid container spacing={3}>
+            <Grid container spacing={3} sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' } }}>
                 {/* Левая колонка - форма и прогресс */}
-                <Grid item xs={12} md={6}>
-                    <Card sx={{ height: "100%", borderRadius: 3 }}>
+                <Grid item xs={12} md={6} lg={6} sx={{ flex: 1 }}>
+                    <Card sx={{ height: "100%", borderRadius: 3, }}>
                         <CardContent>
                             <Typography variant="h5" gutterBottom fontWeight="600" color="#1e293b">
                                 Введите ИНН для поиска
                             </Typography>
 
-                            {/* Кнопки загрузки из файла */}
                             <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
-                                {/* Скрытый input для загрузки файлов */}
+
                                 <input
                                     type="file"
                                     id="excel-upload"
@@ -242,14 +238,12 @@ const ParseSite = () => {
                                     style={{ display: 'none' }}
                                 />
 
-                                {/* Используем только компонент с кнопками */}
                                 <InnUploadButtons
                                     onExcelUpload={handleExcelUpload}
                                     onPasteFromClipboard={handlePasteFromClipboard}
                                     disabled={isParsing}
                                 />
                             </Box>
-
 
                             <Box sx={{ my: 3 }}>
                                 <TextField
@@ -369,7 +363,7 @@ const ParseSite = () => {
                 </Grid>
 
                 {/* Правая колонка - лог и информация */}
-                <Grid item xs={12} md={6}>
+                <Grid item xs={12} md={6} lg={6} sx={{ flex: 1 }}>
                     <Card sx={{ height: "100%", borderRadius: 3 }}>
                         <CardContent sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -569,8 +563,8 @@ const ParseSite = () => {
             )}
 
             {/* Информационные карточки */}
-            <Grid container spacing={3} sx={{ mt: 4 }}>
-                <Grid item xs={12} md={4}>
+            <Grid container spacing={3} sx={{ mt: 4, display: 'flex', justifyContent: 'center' }}>
+                <Grid item xs={12} md={12} sx={{ minWidth: '100%' }}>
                     <Card sx={{ borderRadius: 3, height: "100%" }}>
                         <CardContent>
                             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -585,7 +579,7 @@ const ParseSite = () => {
                         </CardContent>
                     </Card>
                 </Grid>
-                <Grid item xs={12} md={4}>
+                <Grid item xs={12} md={12} sx={{ minWidth: '100%' }}>
                     <Card sx={{ borderRadius: 3, height: "100%" }}>
                         <CardContent>
                             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -600,7 +594,7 @@ const ParseSite = () => {
                         </CardContent>
                     </Card>
                 </Grid>
-                <Grid item xs={12} md={4}>
+                <Grid item xs={12} md={12} sx={{ minWidth: '100%' }}>
                     <Card sx={{ borderRadius: 3, height: "100%" }}>
                         <CardContent>
                             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>

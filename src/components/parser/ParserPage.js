@@ -5,10 +5,6 @@ import { Link } from 'react-router-dom';
 
 const ParserPage = () => {
 
-    const handleToSiteParsing = () => {
-
-    }
-
 
   return (
     <div className="parser-container">
@@ -16,34 +12,34 @@ const ParserPage = () => {
         <h2>Парсер данных</h2>
         <p>Инструмент для анализа и обработки информации</p>
       </div>
-      
+
       <div className="parser-cards">
         <div className="parser-card">
           <div className="card-icon">🌐</div>
           <h3>Парсинг сайтов</h3>
           <p>Сбор данных с веб-страниц</p>
-          <Link 
+          <Link
             to="/parseSite"
             className="card-button"
-            >
-                Начать
-           </Link>
+          >
+            Начать
+          </Link>
         </div>
-        
+
         <div className="parser-card">
           <div className="card-icon">📄</div>
           <h3>Обработка документов</h3>
           <p>Анализ PDF, Word, Excel файлов</p>
           <button className="card-button">Начать</button>
         </div>
-        
+
         <div className="parser-card">
           <div className="card-icon">📊</div>
           <h3>Анализ данных</h3>
           <p>Статистика и визуализация</p>
           <button className="card-button">Начать</button>
         </div>
-        
+
         <div className="parser-card">
           <div className="card-icon">🔄</div>
           <h3>Трансформация</h3>
@@ -51,7 +47,7 @@ const ParserPage = () => {
           <button className="card-button">Начать</button>
         </div>
       </div>
-      
+
       <div className="quick-actions">
         <h3>Быстрые действия</h3>
         <div className="action-buttons">

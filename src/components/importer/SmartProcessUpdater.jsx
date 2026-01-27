@@ -1,17 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import {
     BitrixService,
-    getAllSmartProcesses, 
-    getFieldsItem, 
+    getAllSmartProcesses,
+    getFieldsItem,
     readExcelFile,
     mockProcesses,
-    mockFields 
+    mockFields
 } from './bitrixService';
 import { importExcelToBitrix } from './importExcelToBitrix';
-
 import Swal from 'sweetalert2';
 
 const SmartProcessUpdater = () => {
+
     const [processList, setProcessList] = useState([]);
     const [selectedProcess, setSelectedProcess] = useState('');
     const [entityTypeId, setEntityTypeId] = useState('');
@@ -24,20 +24,18 @@ const SmartProcessUpdater = () => {
     const [currentStep, setCurrentStep] = useState(1);
     const [apiError, setApiError] = useState(null);
     const [useMockData, setUseMockData] = useState(false);
-    const [importLogs, setImportLogs] = useState([]); // ИЗМЕНИТЬ: было null, стало []
+    const [importLogs, setImportLogs] = useState([]); 
     const [isImporting, setIsImporting] = useState(false);
     const [isCancelled, setIsCancelled] = useState(false);
     const [progress, setProgress] = useState(0);
     const [sdkAvailable, setSdkAvailable] = useState(true);
     const [sdkError, setSdkError] = useState(null);
     const b24Service = new BitrixService('https://acceptgroup.bitrix24.ru/rest/116/c1o0f03s3eluvrmo/');
-  
+
 
     useEffect(() => {
         const checkSDK = async () => {
             try {
-                // УПРОЩЕННАЯ проверка - просто тестовый вызов
-                // Вместо init() делаем простой тестовый запрос
                 await b24Service.call('crm.type.list', {
                     start: 0,
                     order: { entityTypeId: 'DESC' }
@@ -48,17 +46,17 @@ const SmartProcessUpdater = () => {
                 console.log('SDK недоступен, используем демо-режим:', error.message);
                 setSdkAvailable(false);
                 setSdkError(error.message);
-                setUseMockData(true); // Автоматически переключаемся на демо-режим
+                setUseMockData(true); 
             }
         };
 
         checkSDK();
         loadProcesses();
-        
+
         const savedEntityTypeId = sessionStorage.getItem('entityTypeId');
         const savedExcelData = sessionStorage.getItem('excelData');
         const savedMapping = sessionStorage.getItem('mapping');
-        
+
         if (savedEntityTypeId) {
             setEntityTypeId(savedEntityTypeId);
             setSelectedProcess(savedEntityTypeId);
@@ -76,21 +74,18 @@ const SmartProcessUpdater = () => {
     const loadProcesses = async () => {
         setLoading(true);
         setApiError(null);
-        
+
         try {
             let result;
-            
+
             if (useMockData || !sdkAvailable) {
-                // Используем мок данные
                 console.log('Используем мок данные');
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 result = mockProcesses;
             } else {
-                // Пробуем реальный API
                 console.log('Пробуем реальный API');
                 result = await getAllSmartProcesses(b24Service);
-                
-                // Если API не доступен, переключаемся на мок данные
+
                 if (!result.success) {
                     console.log('API недоступно, переключаемся на мок данные');
                     setUseMockData(true);
@@ -98,7 +93,7 @@ const SmartProcessUpdater = () => {
                     result = mockProcesses;
                 }
             }
-            
+
             if (result.success) {
                 setProcessList(Object.values(result.data));
             } else {
@@ -107,7 +102,7 @@ const SmartProcessUpdater = () => {
         } catch (error) {
             console.error('Ошибка загрузки процессов:', error);
             setApiError(error.message);
-            // При ошибке переключаемся на мок данные
+
             setUseMockData(true);
             await new Promise(resolve => setTimeout(resolve, 1000));
             setProcessList(Object.values(mockProcesses.data));
@@ -133,10 +128,10 @@ const SmartProcessUpdater = () => {
 
         setLoading(true);
         setApiError(null);
-        
+
         try {
             let fieldsResult;
-            
+
             if (useMockData || !sdkAvailable) {
                 // Используем мок данные полей
                 await new Promise(resolve => setTimeout(resolve, 500));
@@ -144,14 +139,14 @@ const SmartProcessUpdater = () => {
             } else {
                 // Реальный запрос к API
                 fieldsResult = await getFieldsItem(b24Service, parseInt(selectedProcess));
-                
+
                 if (!fieldsResult.success) {
                     setUseMockData(true);
                     await new Promise(resolve => setTimeout(resolve, 500));
                     fieldsResult = mockFields;
                 }
             }
-            
+
             if (fieldsResult.success) {
                 setFields(fieldsResult.data);
             } else {
@@ -196,14 +191,14 @@ const SmartProcessUpdater = () => {
             setUploadedFileName(excelFile.name);
             sessionStorage.setItem('excelData', JSON.stringify(result));
             setCurrentStep(3);
-            
+
             // Инициализируем маппинг
             const initialMapping = {};
             result.columns.forEach(column => {
                 initialMapping[column] = '';
             });
             setMapping(initialMapping);
-            
+
         } catch (error) {
             Swal.fire({
                 icon: 'error',
@@ -235,7 +230,7 @@ const SmartProcessUpdater = () => {
         setMapping({});
         setUploadedFileName('');
         setCurrentStep(1);
-        
+
         sessionStorage.removeItem('entityTypeId');
         sessionStorage.removeItem('excelData');
         sessionStorage.removeItem('mapping');
@@ -332,12 +327,12 @@ const SmartProcessUpdater = () => {
             <div className="mode-indicator">
                 Режим: {useMockData || !sdkAvailable ? 'Демо данные' : 'Реальный Bitrix24'}
                 {!sdkAvailable && (
-                    <span style={{color: '#f59e0b', marginLeft: '10px'}}>
+                    <span style={{ color: '#f59e0b', marginLeft: '10px' }}>
                         (Работаем в демо-режиме)
                     </span>
                 )}
                 {apiError && (
-                    <span style={{color: '#dc2626', marginLeft: '10px'}}>
+                    <span style={{ color: '#dc2626', marginLeft: '10px' }}>
                         (Ошибка: {apiError})
                     </span>
                 )}
@@ -366,8 +361,8 @@ const SmartProcessUpdater = () => {
                         <h2>Выберите смарт-процесс</h2>
                         <form onSubmit={handleProcessSelect} className="form">
                             <div className="form-group">
-                                <select 
-                                    value={selectedProcess} 
+                                <select
+                                    value={selectedProcess}
                                     onChange={(e) => setSelectedProcess(e.target.value)}
                                     className="form-select"
                                     required
@@ -397,12 +392,12 @@ const SmartProcessUpdater = () => {
                             <button onClick={clearSession} className="btn-text">Сменить процесс</button>
                         </div>
                         <p className="process-info">Выбранный процесс: <strong>ID {entityTypeId}</strong></p>
-                        
+
                         <form onSubmit={handleFileUpload} className="form">
                             <div className="file-upload-area">
-                                <input 
-                                    type="file" 
-                                    accept=".xls,.xlsx" 
+                                <input
+                                    type="file"
+                                    accept=".xls,.xlsx"
                                     onChange={(e) => setExcelFile(e.target.files[0])}
                                     className="file-input"
                                     id="file-upload"
@@ -436,10 +431,10 @@ const SmartProcessUpdater = () => {
                             <h2>Сопоставление полей</h2>
                             <div>
                                 <button onClick={() => setCurrentStep(2)} className="btn-text">Назад</button>
-                                <button onClick={clearSession} className="btn-text" style={{marginLeft: '10px'}}>Новый импорт</button>
+                                <button onClick={clearSession} className="btn-text" style={{ marginLeft: '10px' }}>Новый импорт</button>
                             </div>
                         </div>
-                        
+
                         <div className="info-grid">
                             <div className="info-item">
                                 <label>Процесс:</label>
@@ -468,7 +463,7 @@ const SmartProcessUpdater = () => {
                                                 <div className="excel-field">{column}</div>
                                             </div>
                                             <div className="mapping-col">
-                                                <select 
+                                                <select
                                                     value={mapping[column] || ''}
                                                     onChange={(e) => handleMappingChange(column, e.target.value)}
                                                     className="field-select"
@@ -489,29 +484,29 @@ const SmartProcessUpdater = () => {
                                     ))}
                                 </div>
                             </div>
-                            
+
                             <div className="action-bar">
                                 {isImporting && (
                                     <div className="import-progress">
                                         <div className="progress-bar-container">
-                                            <div 
-                                                className="progress-fill" 
+                                            <div
+                                                className="progress-fill"
                                                 style={{ width: `${progress}%` }}
                                             ></div>
                                         </div>
                                         <p>{progress}% завершено</p>
-                                        <button 
-                                            onClick={cancelImport} 
+                                        <button
+                                            onClick={cancelImport}
                                             className="btn-secondary"
                                         >
                                             Отменить импорт
                                         </button>
                                     </div>
                                 )}
-                                
-                                <button 
-                                    type="submit" 
-                                    className="btn-primary large" 
+
+                                <button
+                                    type="submit"
+                                    className="btn-primary large"
                                     disabled={loading || isImporting}
                                 >
                                     {isImporting ? 'Идёт импорт...' : '🚀 Начать импорт'}
@@ -528,13 +523,13 @@ const SmartProcessUpdater = () => {
                     <h3>Логи импорта:</h3>
                     <div className="logs-container">
                         {importLogs.map((log, i) => (
-                            <div 
-                                key={i} 
+                            <div
+                                key={i}
                                 className="log-entry"
                                 style={{
                                     color: log.includes('❌') ? '#dc2626' :
-                                           log.includes('✅') ? '#16a34a' :
-                                           log.includes('➕') ? '#2563eb' : '#000000'
+                                        log.includes('✅') ? '#16a34a' :
+                                            log.includes('➕') ? '#2563eb' : '#000000'
                                 }}
                             >
                                 {log}

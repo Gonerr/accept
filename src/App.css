@@ -84,13 +84,13 @@ body {
 .nav-button:hover {
   background: #edf2f7;
   color: #2d3748;
-  transform: translateX(5px);
+  transform: translateY(-5px);
 }
 
 .nav-button.active {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+  box-shadow: 4px 0 15px rgba(102, 126, 234, 0.4);
 }
 
 .nav-icon {
@@ -106,13 +106,13 @@ body {
 
 .active-indicator {
   position: absolute;
-  right: -15px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 8px;
-  height: 40px;
+  bottom: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 50%;
+  height: 8px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 4px;
+  border-radius: 5px;
 }
 
 .sidebar-footer {
