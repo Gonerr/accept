@@ -1,8 +1,15 @@
 // ParserPage.js
 import React from 'react';
 import './ParserPage.css';
+import { Link } from 'react-router-dom';
 
 const ParserPage = () => {
+
+    const handleToSiteParsing = () => {
+
+    }
+
+
   return (
     <div className="parser-container">
       <div className="parser-header">
@@ -15,7 +22,12 @@ const ParserPage = () => {
           <div className="card-icon">🌐</div>
           <h3>Парсинг сайтов</h3>
           <p>Сбор данных с веб-страниц</p>
-          <button className="card-button">Начать</button>
+          <Link 
+            to="/parseSite"
+            className="card-button"
+            >
+                Начать
+           </Link>
         </div>
         
         <div className="parser-card">

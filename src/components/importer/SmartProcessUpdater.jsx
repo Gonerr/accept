@@ -30,9 +30,8 @@ const SmartProcessUpdater = () => {
     const [progress, setProgress] = useState(0);
     const [sdkAvailable, setSdkAvailable] = useState(true);
     const [sdkError, setSdkError] = useState(null);
-    
-    // Создаем экземпляр сервиса
     const b24Service = new BitrixService('https://acceptgroup.bitrix24.ru/rest/116/c1o0f03s3eluvrmo/');
+  
 
     useEffect(() => {
         const checkSDK = async () => {
