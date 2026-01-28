@@ -4,7 +4,12 @@ import * as XLSX from 'xlsx';
 import { parse } from 'node-html-parser';
 
 // URL прокси-сервера
-const PROXY_URL = '';
+const PROXY_SERVICES = [
+    'https://corsproxy.io/?',
+    '213.131.85.30:1981',
+    'https://api.allorigins.win/raw?url=',
+    'https://thingproxy.freeboard.io/fetch/'
+];
 
 export class ParserService {
 
@@ -16,110 +21,119 @@ export class ParserService {
             .filter(inn => /^\d{10,12}$/.test(inn)); 
     }
 
-    static async fetchOperatorId(inn) {
-        // Используем прокси
-        const targetUrl = `https://pd.rkn.gov.ru/operators-registry/operators-list/?act=search&name_full=&inn=${inn}&regn=`;
-        const proxyUrl = `${PROXY_URL}${targetUrl}`;
+    // Универсальный метод запроса через прокси
+    static async makeRequest(url) {
+        for (const proxy of PROXY_SERVICES) {
+            try {
+                const proxyUrl = proxy === 'https://thingproxy.freeboard.io/fetch/'
+                    ? `${proxy}${url}`
+                    : `${proxy}${encodeURIComponent(url)}`;
+                
+                console.log(`Пробуем запрос через: ${proxyUrl.substring(0, 100)}...`);
+                ы
+                const response = await axios.get(proxyUrl, {
+                    timeout: 30000,
+                    // В браузере не все заголовки можно установить
+                    headers: {
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                        'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7'
+                    }
+                });
 
-        console.log(`Запрос через прокси: ${proxyUrl}`);
+                if (response.data) {
+                    console.log(`✅ Запрос успешен через ${proxy.split('/')[2]}`);
+                    return response.data;
+                }
+            } catch (error) {
+                console.log(`❌ Прокси не сработал:`, error.message);
+                continue;
+            }
+        }
+        throw new Error('Все прокси не сработали');
+    }
+
+    static async fetchOperatorId(inn) {
+        const targetUrl = `https://pd.rkn.gov.ru/operators-registry/operators-list/?act=search&name_full=&inn=${inn}&regn=`;
+        
+        console.log(`Ищем ID для ИНН ${inn}`);
 
         try {
-            const response = await axios.get(proxyUrl, {
-                timeout: 30000,
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                    'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7'
-                }
-            });
-
-            if (!response.data) {
+            const html = await this.makeRequest(targetUrl);
+            
+            if (!html) {
                 throw new Error('Пустой ответ от сервера');
             }
 
-            const html = response.data;
             const root = parse(html);
 
+            // Метод 1: Ищем ссылки с id
             const links = root.querySelectorAll('a[href*="?id="]');
-            console.log(`Найдено ссылок: ${links.length}`);
+            console.log(`Найдено ссылок с id=: ${links.length}`);
 
             if (links.length > 0) {
-                const href = links[0].getAttribute('href');
-                const match = href.match(/\?id=([^&]+)/);
-                if (match && match[1]) {
-                    console.log(`Найден ID для ИНН ${inn}: ${match[1]}`);
-                    return match[1];
-                }
-            }
-
-            const rows = root.querySelectorAll('tr');
-            for (const row of rows) {
-                const cells = row.querySelectorAll('td');
-                if (cells.length > 0) {
-                    const text = row.textContent || '';
-                    if (text.includes(`ИНН: ${inn}`)) {
-                        const link = row.querySelector('a[href*="?id="]');
-                        if (link) {
-                            const href = link.getAttribute('href');
-                            const match = href.match(/\?id=([^&]+)/);
-                            return match ? match[1] : null;
+                for (const link of links) {
+                    const href = link.getAttribute('href');
+                    if (href) {
+                        const match = href.match(/\?id=([^&]+)/);
+                        if (match && match[1]) {
+                            console.log(`✅ Найден ID для ИНН ${inn}: ${match[1]}`);
+                            return match[1];
                         }
                     }
                 }
             }
 
+            // Метод 2: Ищем в таблице
+            const rows = root.querySelectorAll('tr');
+            for (const row of rows) {
+                const cells = row.querySelectorAll('td');
+                if (cells.length > 0) {
+                    const text = row.textContent || '';
+                    if (text.includes(`ИНН: ${inn}`) || text.includes(inn)) {
+                        const link = row.querySelector('a[href*="?id="]');
+                        if (link) {
+                            const href = link.getAttribute('href');
+                            const match = href.match(/\?id=([^&]+)/);
+                            if (match && match[1]) {
+                                return match[1];
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Метод 3: Ищем по регулярным выражениям
+            const patterns = [
+                /\?id=([^&"']+)/,
+                /"\/operators-registry\/operators-list\/\?id=([^&"']+)"/,
+                /'\/operators-registry\/operators-list\/\?id=([^&"']+)'/
+            ];
+            
+            for (const pattern of patterns) {
+                const match = html.match(pattern);
+                if (match && match[1]) {
+                    const id = match[1];
+                    console.log(`✅ Найден ID по паттерну: ${id}`);
+                    return id;
+                }
+            }
+
+            console.log(`❌ ID для ИНН ${inn} не найден`);
             return null;
 
         } catch (error) {
             console.error(`Ошибка при поиске ID для ИНН ${inn}:`, error.message);
-            if (error.message.includes('CORS') || error.message.includes('Network Error')) {
-                console.log('Пробуем альтернативный метод...');
-                return await this.tryDirectFetch(inn);
-            }
-
-            throw error;
+            return null;
         }
-    }
-
-    // Альтернативный метод для тестирования
-    static async tryDirectFetch(inn) {
-        try {
-            const response = await fetch(
-                `https://cors-anywhere.herokuapp.com/https://pd.rkn.gov.ru/operators-registry/operators-list/?act=search&inn=${inn}`,
-                {
-                    mode: 'cors',
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0'
-                    }
-                }
-            );
-
-            if (response.ok) {
-                const text = await response.text();
-                const match = text.match(/\?id=([^&"]+)/);
-                return match ? match[1] : null;
-            }
-        } catch (e) {
-            console.error('Альтернативный метод тоже не сработал:', e.message);
-        }
-        return null;
     }
 
     static async fetchOperatorDetails(id) {
         const targetUrl = `https://pd.rkn.gov.ru/operators-registry/operators-list/?id=${id}`;
-        const proxyUrl = `${PROXY_URL}${targetUrl}`;
-
-        console.log(`Запрос деталей: ${proxyUrl}`);
+        
+        console.log(`Запрашиваем детали для ID ${id}`);
 
         try {
-            const response = await axios.get(proxyUrl, {
-                timeout: 30000,
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                }
-            });
-
-            const html = response.data;
+            const html = await this.makeRequest(targetUrl);
             const root = parse(html);
 
             const result = {
@@ -130,34 +144,83 @@ export class ParserService {
                 'Дата регистрации': ''
             };
 
-            // Парсим таблицу с деталями
-            const rows = root.querySelectorAll('table tr');
+            // Парсим все таблицы
+            const tables = root.querySelectorAll('table');
+            
+            tables.forEach(table => {
+                const rows = table.querySelectorAll('tr');
+                
+                rows.forEach(row => {
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length >= 2) {
+                        const key = cells[0].text.trim()
+                            .replace(/&nbsp;/g, ' ')
+                            .replace(/\s+/g, ' ')
+                            .replace(/:/g, '')
+                            .trim();
 
-            rows.forEach(row => {
-                const cells = row.querySelectorAll('td');
-                if (cells.length >= 2) {
-                    const key = cells[0].text.trim()
-                        .replace(/&nbsp;/g, ' ')
-                        .replace(/\s+/g, ' ');
+                        const value = cells[1].text.trim()
+                            .replace(/&nbsp;/g, ' ')
+                            .replace(/\s+/g, ' ')
+                            .trim();
 
-                    let value = cells[1].text.trim()
-                        .replace(/&nbsp;/g, ' ')
-                        .replace(/\s+/g, ' ');
-
-                    if (key.includes('ИНН')) result['ИНН'] = value;
-                    if (key.includes('Наименование')) result['Наименование оператора'] = value;
-                    if (key.includes('Юридический адрес')) result['Юридический адрес'] = value;
-                    if (key.includes('Дата регистрации')) result['Дата регистрации'] = value;
-                    result[key] = value;
-                }
+                        // Добавляем все поля
+                        if (key) {
+                            result[key] = value;
+                            
+                            // Автоматически заполняем основные поля
+                            if (key.includes('ИНН')) result['ИНН'] = value;
+                            if (key.includes('Наименование')) result['Наименование оператора'] = value;
+                            if (key.includes('Юридический адрес')) result['Юридический адрес'] = value;
+                            if (key.includes('Дата регистрации')) result['Дата регистрации'] = value;
+                            if (key.includes('Регистрационный номер')) result['Регистрационный номер'] = value;
+                        }
+                    }
+                });
             });
 
             return result;
 
         } catch (error) {
             console.error(`Ошибка при получении деталей для ID ${id}:`, error.message);
-            throw error;
+            
+            // Возвращаем хотя бы ID
+            return {
+                'Регистрационный номер': id,
+                'ИНН': '',
+                'Наименование оператора': '',
+                'Юридический адрес': '',
+                'Дата регистрации': ''
+            };
         }
+    }
+
+    // Добавьте эту функцию для тестирования прокси
+    static async testProxies() {
+        const testUrl = 'https://pd.rkn.gov.ru/operators-registry/operators-list/?act=search&inn=7707083893';
+        console.log('Тестируем доступность прокси...');
+        
+        for (const proxy of PROXY_SERVICES) {
+            try {
+                const proxyUrl = proxy === 'https://thingproxy.freeboard.io/fetch/'
+                    ? `${proxy}${testUrl}`
+                    : `${proxy}${encodeURIComponent(testUrl)}`;
+                
+                console.log(`Тестируем: ${proxy}`);
+                
+                const response = await fetch(proxyUrl, { timeout: 10000 });
+                if (response.ok) {
+                    const text = await response.text();
+                    console.log(`✅ ${proxy} - работает, длина ответа: ${text.length}`);
+                    return proxy;
+                }
+            } catch (e) {
+                console.log(`❌ ${proxy} - не работает: ${e.message}`);
+            }
+        }
+        
+        console.log('❌ Все прокси не работают');
+        return null;
     }
 
     static async startParsingProcess(innList, onProgress) {

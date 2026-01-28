@@ -80,6 +80,12 @@ const ParseSite = () => {
         setParsedData([]);
         setLogs([]);
 
+        const workingProxy = await ParserService.testProxies();
+        if (!workingProxy) {
+            alert('Прокси не работают. Попробуйте позже или используйте VPN.');
+            return;
+        }
+        
         addLog("Начинаем парсинг...", "info");
         addLog(`Введенные ИНН: ${inn}`, "info");
 
