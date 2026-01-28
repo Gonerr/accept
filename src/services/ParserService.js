@@ -4,7 +4,9 @@ import * as XLSX from 'xlsx';
 import { parse } from 'node-html-parser';
 
 // URL прокси-сервера
-const PROXY_URL = 'http://localhost:8080/';
+const PROXY_URL = window.location.hostname === 'localhost' 
+    ? 'http://localhost:3001/api' 
+    : 'https://api.allorigins.win/raw?url='; 
 
 export class ParserService {
 
