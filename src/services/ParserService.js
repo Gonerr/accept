@@ -354,8 +354,6 @@ export class ParserService {
 
                         // Очищаем телефонную часть от нецифровых символов
                         let phoneDigits = phonePart.replace(/\D/g, '');
-
-                        // Проверяем длину - для российских телефонов обычно 10 или 11 цифр
                         if (phoneDigits.length >= 10 && phoneDigits.length <= 12) {
                             // Если больше 11 цифр, берем первые 11 (возможен лишний код страны)
                             if (phoneDigits.length > 11) {
