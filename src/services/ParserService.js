@@ -5,10 +5,9 @@ import { parse } from 'node-html-parser';
 
 // URL прокси-сервера
 const PROXY_SERVICES = [
+    'http://localhost:3000/',
     'https://corsproxy.io/?',
-    '213.131.85.30:1981',
-    'https://api.allorigins.win/raw?url=',
-    'https://thingproxy.freeboard.io/fetch/'
+    'https://api.allorigins.win/raw?url='
 ];
 
 export class ParserService {
@@ -30,13 +29,14 @@ export class ParserService {
                     : `${proxy}${encodeURIComponent(url)}`;
                 
                 console.log(`Пробуем запрос через: ${proxyUrl.substring(0, 100)}...`);
-                ы
+      
                 const response = await axios.get(proxyUrl, {
                     timeout: 30000,
                     // В браузере не все заголовки можно установить
                     headers: {
-                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                        'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7'
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+                        'Accept': 'text/html',
+                        'Accept-Language': 'ru-RU,ru;q=0.9'
                     }
                 });
 
@@ -59,7 +59,12 @@ export class ParserService {
 
         try {
             const html = await this.makeRequest(targetUrl);
-            
+            console.log('HTML length:', html.length);
+
+            if (html.length < 2000) {
+            console.warn('Похоже, получена заглушка или капча:', html);
+            }
+
             if (!html) {
                 throw new Error('Пустой ответ от сервера');
             }
