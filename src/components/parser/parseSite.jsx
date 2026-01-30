@@ -50,6 +50,89 @@ const ParseSite = () => {
     const [parsedData, setParsedData] = useState([]);
     const [logs, setLogs] = useState([]);
 
+
+    const [isChecking, setIsChecking] = useState(false);
+    const [checkingProgress, setCheckingProgress] = useState(0);
+    const [checkResults, setCheckResults] = useState([]);
+
+    const handleQuickCheck = async () => {
+        if (!inn.trim()) {
+            addLog("Ошибка: Введите ИНН для проверки", "error");
+            return;
+        }
+
+        setIsChecking(true);
+        setCheckingProgress(0);
+        setCheckResults([]);
+
+        addLog("Начинаем быструю проверку ИНН...", "info");
+        addLog(`Проверяемые ИНН: ${inn}`, "info");
+
+        try {
+            const innArray = ParserService.parseINNList(inn);
+
+            if (!innArray || innArray.length === 0) {
+                addLog("Ошибка: Не найдено валидных ИНН", "error");
+                setIsChecking(false);
+                return;
+            }
+
+            addLog(`Найдено ${innArray.length} валидных ИНН для проверки`, "info");
+
+            const results = await ParserService.bulkCheckINNs(innArray, (progressData) => {
+                if (progressData.step === 'Общий прогресс') {
+                    setCheckingProgress(progressData.percent);
+                }
+
+                const logMessage = progressData.message ||
+                    `${progressData.inn ? `ИНН ${progressData.inn}: ` : ''}${progressData.step} - ${progressData.status}`;
+
+                addLog(logMessage, progressData.status === 'error' ? 'error' : 'info');
+            });
+
+            setCheckResults(results);
+
+            // Подсчет статистики
+            const foundCount = results.filter(r => r['Найден в системе'] === 'Да').length;
+            const missingCount = results.filter(r => r['Найден в системе'] === 'Нет').length;
+            const errorCount = results.filter(r => r['Найден в системе'] === 'Ошибка').length;
+
+            addLog(`✅ Проверка завершена! Найдено: ${foundCount}, Не найдено: ${missingCount}, Ошибок: ${errorCount}`, "success");
+
+        } catch (error) {
+            console.error("Ошибка проверки:", error);
+            addLog(`❌ Ошибка: ${error.message || "Неизвестная ошибка"}`, "error");
+        } finally {
+            setIsChecking(false);
+        }
+    };
+
+    // Функция для экспорта не найденных ИНН
+    const handleExportMissing = () => {
+        if (!checkResults || checkResults.length === 0) {
+            addLog("Нет результатов проверки для экспорта", "error");
+            return;
+        }
+
+        try {
+            addLog("Экспорт не найденных ИНН в Excel...", "info");
+            const missingCount = ParserService.exportMissingINNs(checkResults, `missing_inns_${Date.now()}.xlsx`);
+
+            if (missingCount) {
+                addLog(`✅ Экспортировано ${missingCount} не найденных ИНН`, "success");
+            } else {
+                addLog("✅ Все ИНН найдены в системе, файл не создан", "info");
+            }
+        } catch (error) {
+            addLog(`❌ Ошибка при экспорте: ${error.message}`, "error");
+        }
+    };
+
+    // Получение статистики проверки
+    const missingCount = checkResults.filter(item => item['Найден в системе'] === 'Нет').length;
+    const foundCount = checkResults.filter(item => item['Найден в системе'] === 'Да').length;
+    const errorCount = checkResults.filter(item => item['Найден в системе'] === 'Ошибка').length;
+
     const getLogColor = useCallback((type) => {
         switch (type) {
             case "success": return "#10b981";
@@ -79,7 +162,7 @@ const ParseSite = () => {
         setProgress(0);
         setParsedData([]);
         setLogs([]);
-        
+
         addLog("Начинаем парсинг...", "info");
         addLog(`Введенные ИНН: ${inn}`, "info");
 
@@ -357,6 +440,178 @@ const ParseSite = () => {
                                 >
                                     Экспорт в Excel ({successfulCount}/{totalCount})
                                 </Button>
+                            )}
+
+                            <Box sx={{ mt: 3, display: 'flex', gap: 2, flexDirection: 'column' }}>
+                                <Button
+                                    fullWidth
+                                    variant="contained"
+                                    color="secondary"
+                                    size="medium"
+                                    onClick={handleQuickCheck}
+                                    disabled={isChecking || !inn.trim()}
+                                    startIcon={<SearchIcon />}
+                                    sx={{
+                                        py: 1.2,
+                                        borderRadius: 2,
+                                        fontSize: "1rem",
+                                        fontWeight: 600,
+                                        textTransform: "none",
+                                        background: "linear-gradient(135deg, #10b981, #059669)",
+                                        "&:hover": {
+                                            background: "linear-gradient(135deg, #0da271, #047857)",
+                                            transform: "translateY(-1px)",
+                                            boxShadow: "0 4px 12px rgba(16, 185, 129, 0.4)"
+                                        },
+                                        "&:disabled": {
+                                            background: "#9ca3af",
+                                        }
+                                    }}
+                                >
+                                    {isChecking ? `Проверка... ${checkingProgress}%` : "Быстрая проверка ИНН"}
+                                </Button>
+
+                                {missingCount > 0 && (
+                                    <Button
+                                        fullWidth
+                                        variant="outlined"
+                                        color="warning"
+                                        size="medium"
+                                        onClick={handleExportMissing}
+                                        disabled={missingCount === 0}
+                                        startIcon={<DownloadIcon />}
+                                        sx={{
+                                            py: 1.2,
+                                            borderRadius: 2,
+                                            fontSize: "1rem",
+                                            fontWeight: 600,
+                                            textTransform: "none",
+                                            borderColor: "#f59e0b",
+                                            color: "#f59e0b",
+                                            "&:hover": {
+                                                borderColor: "#d97706",
+                                                backgroundColor: "rgba(245, 158, 11, 0.04)"
+                                            },
+                                            "&:disabled": {
+                                                borderColor: "#9ca3af",
+                                                color: "#9ca3af"
+                                            }
+                                        }}
+                                    >
+                                        Экспорт не найденных ИНН ({missingCount})
+                                    </Button>
+                                )}
+                            </Box>
+
+                            {isChecking && (
+                                <Box sx={{ mt: 3 }}>
+                                    <Box sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}>
+                                        <Typography variant="body2" color="text.secondary">
+                                            Прогресс проверки
+                                        </Typography>
+                                        <Typography variant="body2" color="text.secondary">
+                                            {checkingProgress}%
+                                        </Typography>
+                                    </Box>
+                                    <LinearProgress
+                                        variant="determinate"
+                                        value={checkingProgress}
+                                        sx={{
+                                            height: 8,
+                                            borderRadius: 4,
+                                            backgroundColor: "#e5e7eb",
+                                            "& .MuiLinearProgress-bar": {
+                                                background: "linear-gradient(90deg, #10b981, #34d399)",
+                                                borderRadius: 4,
+                                            }
+                                        }}
+                                    />
+                                </Box>
+                            )}
+
+                            {/* В секции статистики добавьте: */}
+                            {checkResults.length > 0 && (
+                                <Box sx={{ mt: 3, pt: 2, borderTop: "1px solid #e5e7eb" }}>
+                                    <Typography variant="subtitle1" gutterBottom fontWeight="600">
+                                        Результаты проверки
+                                    </Typography>
+                                    <Grid container spacing={1}>
+                                        <Grid item xs={4}>
+                                            <Box sx={{ textAlign: 'center', p: 1, bgcolor: '#f0fdf4', borderRadius: 1 }}>
+                                                <Typography variant="h6" color="#059669">
+                                                    {foundCount}
+                                                </Typography>
+                                                <Typography variant="caption" color="#64748b">
+                                                    Найдено
+                                                </Typography>
+                                            </Box>
+                                        </Grid>
+                                        <Grid item xs={4}>
+                                            <Box sx={{ textAlign: 'center', p: 1, bgcolor: '#fef3c7', borderRadius: 1 }}>
+                                                <Typography variant="h6" color="#d97706">
+                                                    {missingCount}
+                                                </Typography>
+                                                <Typography variant="caption" color="#64748b">
+                                                    Не найдено
+                                                </Typography>
+                                            </Box>
+                                        </Grid>
+                                        <Grid item xs={4}>
+                                            <Box sx={{ textAlign: 'center', p: 1, bgcolor: '#fee2e2', borderRadius: 1 }}>
+                                                <Typography variant="h6" color="#dc2626">
+                                                    {errorCount}
+                                                </Typography>
+                                                <Typography variant="caption" color="#64748b">
+                                                    Ошибок
+                                                </Typography>
+                                            </Box>
+                                        </Grid>
+                                    </Grid>
+
+                                    {checkResults.length > 0 && (
+                                        <TableContainer component={Paper} sx={{ mt: 2, borderRadius: 2, maxHeight: 200, overflow: 'auto' }}>
+                                            <Table size="small">
+                                                <TableHead>
+                                                    <TableRow>
+                                                        <TableCell sx={{ fontWeight: 600 }}>ИНН</TableCell>
+                                                        <TableCell sx={{ fontWeight: 600 }}>Статус</TableCell>
+                                                    </TableRow>
+                                                </TableHead>
+                                                <TableBody>
+                                                    {checkResults.slice(0, 5).map((item, index) => (
+                                                        <TableRow key={index}>
+                                                            <TableCell>
+                                                                <Typography variant="body2" fontFamily="monospace">
+                                                                    {item['ИНН']}
+                                                                </Typography>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <Chip
+                                                                    label={item['Найден в системе']}
+                                                                    size="small"
+                                                                    color={
+                                                                        item['Найден в системе'] === 'Да' ? 'success' :
+                                                                            item['Найден в системе'] === 'Нет' ? 'warning' : 'error'
+                                                                    }
+                                                                    variant="outlined"
+                                                                />
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                    {checkResults.length > 5 && (
+                                                        <TableRow>
+                                                            <TableCell colSpan={2} align="center">
+                                                                <Typography variant="caption" color="text.secondary">
+                                                                    ... и еще {checkResults.length - 5} записей
+                                                                </Typography>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    )}
+                                                </TableBody>
+                                            </Table>
+                                        </TableContainer>
+                                    )}
+                                </Box>
                             )}
                         </CardContent>
                     </Card>

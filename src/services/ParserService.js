@@ -24,6 +24,186 @@ export class ParserService {
         return parser.parseFromString(html, 'text/html');
     }
 
+    static async checkINNExistence(inn){ 
+        const targetUrl = `https://pd.rkn.gov.ru/operators-registry/operators-list/?act=search&name_full=&inn=${inn}&regn=`;
+        
+        try {
+            // Используем публичный CORS прокси для проверки
+            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+            
+            const response = await fetch(proxyUrl, { timeout: 10000 });
+            const data = await response.json();
+            
+            if (data && data.contents) {
+                const html = data.contents;
+                // Простая проверка по наличию текста об ИНН
+                return html.includes(`ИНН: ${inn}`) || 
+                       html.includes(`"inn":"${inn}"`) || 
+                       html.includes(`inn=${inn}`) ||
+                       /id=\d+/.test(html); // Есть какой-то ID на странице
+            }
+        } catch (error) {
+            console.log(`Ошибка при проверке ИНН ${inn}:`, error.message);
+        }
+        
+        return false;
+    }
+
+    static async bulkCheckINNs(innList, onProgress){
+        console.log('Начинаем проверку ИНН:', innList);
+
+        if (!innList || innList.length === 0) {
+            console.error('Список ИНН пуст');
+            return [];
+        }
+
+        const results = [];
+
+        for (let i = 0; i < innList.length; i++) {
+            const inn = innList[i];
+            
+            try {
+                // Отправляем прогресс
+                if (onProgress) {
+                    onProgress({
+                        inn,
+                        step: 'Проверка',
+                        status: 'start',
+                        index: i,
+                        total: innList.length,
+                        message: `Проверка ИНН ${inn}...`
+                    });
+                }
+
+                const exists = await this.checkINNExistence(inn);
+                
+                results.push({
+                    'ИНН': inn,
+                    'Найден в системе': exists ? 'Да' : 'Нет',
+                    'Статус': exists ? 'Существует' : 'Не найден'
+                });
+
+                if (onProgress) {
+                    onProgress({
+                        inn,
+                        step: 'Проверка',
+                        status: 'success',
+                        message: `ИНН ${inn}: ${exists ? 'найден' : 'не найден'}`
+                    });
+                }
+
+            } catch (error) {
+                console.error(`Ошибка при проверке ИНН ${inn}:`, error);
+                results.push({
+                    'ИНН': inn,
+                    'Найден в системе': 'Ошибка',
+                    'Статус': `Ошибка: ${error.message || 'Неизвестная ошибка'}`
+                });
+
+                if (onProgress) {
+                    onProgress({
+                        inn,
+                        step: 'Ошибка',
+                        status: 'error',
+                        message: `Ошибка проверки ИНН ${inn}`
+                    });
+                }
+            }
+
+            // Обновляем общий прогресс
+            if (onProgress) {
+                const progressPercent = Math.round(((i + 1) / innList.length) * 100);
+                onProgress({
+                    step: 'Общий прогресс',
+                    status: 'progress',
+                    percent: progressPercent,
+                    processed: i + 1,
+                    total: innList.length,
+                    message: `Проверено: ${i + 1} из ${innList.length}`
+                });
+            }
+
+            // Небольшая задержка между запросами
+            await new Promise(resolve => setTimeout(resolve, 300));
+        }
+
+        console.log('Проверка завершена. Результатов:', results.length);
+        return results;
+    }
+
+    static async exportMissingINNs(data, filename = 'missing_inns.xlsx'){
+        if (!data || data.length === 0) {
+            console.error('Нет данных для экспорта');
+            return;
+        }
+
+        try {
+            // Фильтруем только те ИНН, которых нет в системе
+            const missingINNs = data.filter(item => 
+                item['Найден в системе'] === 'Нет' || 
+                item['Найден в системе'] === false
+            );
+
+            if (missingINNs.length === 0) {
+                console.log('Все ИНН найдены в системе');
+                return null;
+            }
+
+            // Преобразуем данные для Excel
+            const exportData = missingINNs.map(item => ({
+                'ИНН': item['ИНН'] || '',
+                'Статус': 'Не найден в системе',
+                'Дата проверки': new Date().toLocaleDateString('ru-RU')
+            }));
+
+            // Создаем заголовки
+            const headers = [
+                { key: 'ИНН', width: 20 },
+                { key: 'Статус', width: 25 },
+                { key: 'Дата проверки', width: 15 }
+            ];
+
+            // Преобразуем в формат для XLSX
+            const worksheetData = exportData.map(row => {
+                const obj = {};
+                headers.forEach(header => {
+                    obj[header.key] = row[header.key] || '';
+                });
+                return obj;
+            });
+
+            const worksheet = XLSX.utils.json_to_sheet(worksheetData);
+            const workbook = XLSX.utils.book_new();
+
+            // Настраиваем ширину колонок
+            const wscols = headers.map(h => ({ width: h.width }));
+            worksheet['!cols'] = wscols;
+
+            // Добавляем автофильтр
+            if (worksheet['!ref']) {
+                const range = XLSX.utils.decode_range(worksheet['!ref']);
+                worksheet['!autofilter'] = {
+                    ref: XLSX.utils.encode_range({
+                        s: { r: 0, c: 0 },
+                        e: { r: range.e.r, c: headers.length - 1 }
+                    })
+                };
+            }
+
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Не найденные ИНН');
+
+            // Сохраняем файл
+            XLSX.writeFile(workbook, filename);
+
+            console.log(`Файл ${filename} создан с ${missingINNs.length} записями`);
+            return missingINNs.length;
+
+        } catch (error) {
+            console.error('Ошибка при экспорте:', error);
+            throw error;
+        }
+    }
+
     static async fetchOperatorId(inn) {
         // Используем локальный прокси
         const proxyUrl = `/api/proxy/?act=search&name_full=&inn=${inn}&regn=`;
