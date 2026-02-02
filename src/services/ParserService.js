@@ -24,112 +24,197 @@ export class ParserService {
         return parser.parseFromString(html, 'text/html');
     }
 
-    static async checkINNExistence(inn){ 
-        const targetUrl = `https://pd.rkn.gov.ru/operators-registry/operators-list/?act=search&name_full=&inn=${inn}&regn=`;
+    static async checkINNExistence(inn) {
+    const targetUrl = `https://pd.rkn.gov.ru/operators-registry/operators-list/?act=search&name_full=&inn=${inn}&regn=`;
+    
+    try {
+        // Используем локальный прокси вместо публичного
+        const proxyUrl = `/api/proxy/?act=search&name_full=&inn=${inn}&regn=`;
         
-        try {
-            // Используем публичный CORS прокси для проверки
-            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
-            
-            const response = await fetch(proxyUrl, { timeout: 10000 });
-            const data = await response.json();
-            
-            if (data && data.contents) {
-                const html = data.contents;
-                // Простая проверка по наличию текста об ИНН
-                return html.includes(`ИНН: ${inn}`) || 
-                       html.includes(`"inn":"${inn}"`) || 
-                       html.includes(`inn=${inn}`) ||
-                       /id=\d+/.test(html); // Есть какой-то ID на странице
+        // Используем fetch с таймаутом
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        
+        const response = await fetch(proxyUrl, {
+            signal: controller.signal,
+            headers: {
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             }
-        } catch (error) {
-            console.log(`Ошибка при проверке ИНН ${inn}:`, error.message);
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
+        const html = await response.text();
+        
+        // Более точная проверка существования оператора
+        const exists = this.checkIfOperatorExists(html, inn);
+        return exists;
+        
+    } catch (error) {
+        console.log(`Ошибка при проверке ИНН ${inn}:`, error.message);
         return false;
     }
+}
 
-    static async bulkCheckINNs(innList, onProgress){
-        console.log('Начинаем проверку ИНН:', innList);
-
-        if (!innList || innList.length === 0) {
-            console.error('Список ИНН пуст');
-            return [];
-        }
-
-        const results = [];
-
-        for (let i = 0; i < innList.length; i++) {
-            const inn = innList[i];
+static checkIfOperatorExists(html, inn) {
+    try {
+        // Метод 1: Проверка по наличию таблицы результатов
+        if (html.includes('id="search-results"') || 
+            html.includes('class="search-results"') ||
+            html.includes('Результаты поиска')) {
             
-            try {
-                // Отправляем прогресс
-                if (onProgress) {
-                    onProgress({
-                        inn,
-                        step: 'Проверка',
-                        status: 'start',
-                        index: i,
-                        total: innList.length,
-                        message: `Проверка ИНН ${inn}...`
-                    });
-                }
-
-                const exists = await this.checkINNExistence(inn);
+            // Метод 2: Проверка, что есть ссылки на детали оператора
+            const doc = this.parseHTML(html);
+            const links = doc.querySelectorAll('a[href*="?id="]');
+            
+            if (links.length > 0) {
+                // Метод 3: Проверка по наличию ИНН в тексте
+                const hasINNInText = html.includes(`ИНН: ${inn}`) || 
+                                   html.includes(`"inn":"${inn}"`) ||
+                                   html.includes(`inn=${inn}`);
                 
-                results.push({
-                    'ИНН': inn,
-                    'Найден в системе': exists ? 'Да' : 'Нет',
-                    'Статус': exists ? 'Существует' : 'Не найден'
+                // Метод 4: Проверка, что это не пустая таблица
+                const hasTableRows = doc.querySelectorAll('table tr').length > 1;
+                
+                return hasINNInText || hasTableRows;
+            }
+        }
+        
+        // Метод 5: Проверка по тексту "ничего не найдено"
+        const notFoundTexts = [
+            'ничего не найдено',
+            'не найдено',
+            'по вашему запросу',
+            'результатов не найдено'
+        ];
+        
+        const lowerHtml = html.toLowerCase();
+        const hasNotFoundText = notFoundTexts.some(text => lowerHtml.includes(text));
+        
+        return !hasNotFoundText;
+        
+    } catch (parseError) {
+        console.log('Ошибка парсинга HTML при проверке:', parseError);
+        // При ошибке парсинга считаем, что оператор может существовать
+        return true;
+    }
+}
+
+    static async bulkCheckINNs(innList, onProgress) {
+    console.log('Начинаем проверку ИНН:', innList);
+
+    if (!innList || innList.length === 0) {
+        console.error('Список ИНН пуст');
+        return [];
+    }
+
+    const results = [];
+    const batchSize = 3; // Обрабатываем по 3 ИНН параллельно
+    const delayBetweenBatches = 500; // Задержка между пачками
+
+    for (let i = 0; i < innList.length; i += batchSize) {
+        const batch = innList.slice(i, i + batchSize);
+        const batchPromises = [];
+
+        for (let j = 0; j < batch.length; j++) {
+            const inn = batch[j];
+            const index = i + j;
+            
+            // Отправляем прогресс
+            if (onProgress) {
+                onProgress({
+                    inn,
+                    step: 'Проверка',
+                    status: 'start',
+                    index: index + 1,
+                    total: innList.length,
+                    message: `Проверка ИНН ${inn}...`
                 });
-
-                if (onProgress) {
-                    onProgress({
-                        inn,
-                        step: 'Проверка',
-                        status: 'success',
-                        message: `ИНН ${inn}: ${exists ? 'найден' : 'не найден'}`
-                    });
-                }
-
-            } catch (error) {
-                console.error(`Ошибка при проверке ИНН ${inn}:`, error);
-                results.push({
-                    'ИНН': inn,
-                    'Найден в системе': 'Ошибка',
-                    'Статус': `Ошибка: ${error.message || 'Неизвестная ошибка'}`
-                });
-
-                if (onProgress) {
-                    onProgress({
-                        inn,
-                        step: 'Ошибка',
-                        status: 'error',
-                        message: `Ошибка проверки ИНН ${inn}`
-                    });
-                }
             }
 
+            // Создаем промис для каждого ИНН в пачке
+            const promise = (async () => {
+                try {
+                    const exists = await this.checkINNExistence(inn);
+                    
+                    const result = {
+                        'ИНН': inn,
+                        'Найден в системе': exists ? 'Да' : 'Нет',
+                        'Статус': exists ? 'Существует' : 'Не найден'
+                    };
+
+                    if (onProgress) {
+                        onProgress({
+                            inn,
+                            step: 'Проверка',
+                            status: 'success',
+                            message: `ИНН ${inn}: ${exists ? 'найден' : 'не найден'}`
+                        });
+                    }
+
+                    return result;
+                    
+                } catch (error) {
+                    console.error(`Ошибка при проверке ИНН ${inn}:`, error);
+                    
+                    const errorResult = {
+                        'ИНН': inn,
+                        'Найден в системе': 'Ошибка',
+                        'Статус': `Ошибка: ${error.message || 'Неизвестная ошибка'}`
+                    };
+
+                    if (onProgress) {
+                        onProgress({
+                            inn,
+                            step: 'Ошибка',
+                            status: 'error',
+                            message: `Ошибка проверки ИНН ${inn}`
+                        });
+                    }
+
+                    return errorResult;
+                }
+            })();
+
+            batchPromises.push(promise);
+        }
+
+        // Ожидаем выполнение всей пачки
+        try {
+            const batchResults = await Promise.all(batchPromises);
+            results.push(...batchResults);
+            
             // Обновляем общий прогресс
             if (onProgress) {
-                const progressPercent = Math.round(((i + 1) / innList.length) * 100);
+                const progressPercent = Math.round(((i + batch.length) / innList.length) * 100);
                 onProgress({
                     step: 'Общий прогресс',
                     status: 'progress',
                     percent: progressPercent,
-                    processed: i + 1,
+                    processed: i + batch.length,
                     total: innList.length,
-                    message: `Проверено: ${i + 1} из ${innList.length}`
+                    message: `Проверено: ${i + batch.length} из ${innList.length}`
                 });
             }
-
-            // Небольшая задержка между запросами
-            await new Promise(resolve => setTimeout(resolve, 300));
+            
+        } catch (batchError) {
+            console.error('Ошибка в пачке запросов:', batchError);
         }
 
-        console.log('Проверка завершена. Результатов:', results.length);
-        return results;
+        // Задержка между пачками (если не последняя пачка)
+        if (i + batchSize < innList.length) {
+            await new Promise(resolve => setTimeout(resolve, delayBetweenBatches));
+        }
     }
+
+    console.log('Проверка завершена. Результатов:', results.length);
+    return results;
+}
 
     static async exportMissingINNs(data, filename = 'missing_inns.xlsx'){
         if (!data || data.length === 0) {
