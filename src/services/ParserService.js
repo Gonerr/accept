@@ -10,6 +10,57 @@ const PROXY_URL = 'http://localhost:8080/'; // Вернитесь к прост�
 
 export class ParserService {
 
+    static CONFIG = {
+        REQUEST_DELAY: {
+            min: 1000,
+            max: 3000,
+        },
+        BATCH_SIZE: 3,
+        BATCH_DELAY: {
+            min: 500,
+            max: 1500,
+        },
+        MAX_REQUESTS_PER_SESSION: 50,
+        TIMEOUT: 5000,
+
+        USER_AGENTS: [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/120.0.2210.144'
+        ],
+
+        REFERS: [
+            'https://pd.rkn.gov.ru/',
+            'https://pd.rkn.gov.ru/operators-registry/',
+            'https://pd.rkn.gov.ru/operators-registry/operators-list/',
+            'https://www.google.com/',
+            'https://yandex.ru/'
+        ]
+    };
+
+    // Кэш для ускорения повторных проверок
+    static checkCache = new Map();
+    static cacheExpiry = 24 * 60 * 60 * 1000; // 24 часа
+
+    // Вспомогательные методы
+    static getRandomDelay(min, max) {
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    static getRandomUserAgent() {
+        return this.CONFIG.USER_AGENTS[Math.floor(Math.random() * this.CONFIG.USER_AGENTS.length)];
+    }
+
+    static getRandomReferer() {
+        return this.CONFIG.REFERERS[Math.floor(Math.random() * this.CONFIG.REFERERS.length)];
+    }
+
+    static async sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
     static parseINNList(inputString) {
         if (!inputString) return [];
         return inputString
@@ -31,9 +82,11 @@ export class ParserService {
         // Используем локальный прокси вместо публичного
         const proxyUrl = `/api/proxy/?act=search&name_full=&inn=${inn}&regn=`;
         
-        // Используем fetch с таймаутом
+        const delay = this.getRandomDelay(300, 800);
+            await this.sleep(delay);
+
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        const timeoutId = setTimeout(() => controller.abort(), this.CONFIG.TIMEOUT);
         
         const response = await fetch(proxyUrl, {
             signal: controller.signal,
